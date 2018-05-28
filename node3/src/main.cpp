@@ -1,222 +1,382 @@
-// #include <SPI.h>
-// #include <nRF24L01.h>
-// #include <RF24.h>
-// #include<CountUpDownTimer.h>
-//
-// RF24 radio(7, 8);
-//
-// const long broadcast_addr = 1000;
-//
-// struct data_CH{
-//     long CH_addr;
-//     long status;
-// };
-//
-// data_CH text;
-// CountUpDownTimer T(UP, HIGH);
-//
-//
-// void setup()
-// {
-//   while (!Serial);
-//   Serial.begin(57600);
-//   Serial.println("mulai");
-//   radio.begin();
-//   radio.openReadingPipe(0, broadcast_addr);
-//   radio.openWritingPipe(broadcast_addr);
-//   // radio.openReadingPipe(0, rxAddr);
-//   //
-//   // radio.startListening();
-//   T.StartTimer();
-// }
-//
-// bool radio_listening(long addr, data_CH *ret)
-// {
-//
-//     radio.startListening();
-//
-//     if(radio.available())
-//     {
-//         radio.read(ret, sizeof(ret));
-//         return true;
-//     }
-//
-//     return false;
-// }
-//
-// void radio_send(long addr, data_CH * msg, long delay_micro)
-// {
-//
-//     radio.stopListening();
-//     delay(delay_micro);
-//     radio.write(msg, sizeof(msg));
-// }
-//
-// void loop()
-// {
-//     T.Timer();
-//
-//     if(T.ShowSeconds() % 2 == 0)
-//     {
-//       if(radio_listening(broadcast_addr, &text))
-//       {
-//           Serial.println(text.status);
-//       }
-//     }
-//
-//     if(T.ShowSeconds() % 5 == 0)
-//     {
-//       randomSeed(analogRead(0));
-//       data_CH data;
-//       data.status = 2.0;
-//       radio_send(broadcast_addr, &data, random(1,200));
-//     }
-// }
-
-// Pengiriman per 5 detik dengan delay 1 (bisa diextend untuk listening di setiap 1 microsecond
-
+#include<Arduino.h>
+#include <math.h>
+#include <CountUpDownTimer.h>
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
 
+
+int n = 2;
+int r = 1;
+double p = 0.48;
+
 RF24 radio(7, 8);
 
-const byte rxAddr[6] = "00003";
-int a = 0, xMili = 0, xSecond = 0, xMinute = 0, xHour = 0, currentSecond = 0, currentMilis = 0;
-unsigned long wTime;
+const long broadcast_addr = 1000;
+const long self_addr = 2003;
+const long sink_addr = 3003;
+long CH_addr;
+
+const char change_ch_message[] = "CNGCH";
+//Flag saya CH atau bukan
+bool flagCH = false;
+
+//Flag CH sudah ada belum
+bool flag_ch_found = false;
 
 struct data_CH{
     long CH_addr;
     float status;
 };
 
+struct dataSt{
+    long addr;
+    char msg[100];
+};
+
+data_CH ch_lain;
+data_CH ch_now;
+
+dataSt gmsg;
+CountUpDownTimer T(DOWN);
+
+float findT()
+{
+    float phase1 = r * fmod(1 , p);
+    float phase2 = 1 - p * phase1;
+    float t = p / phase2;
+
+    return t;
+}
+
 float getRandom()
 {
-    randomSeed(analogRead(0));
+    randomSeed(analogRead(A0));
     return random(1,100) / 100.0;
 }
 
-void setup()
+float getStatus()
+{
+  //TODO: masih dummy
+    randomSeed(analogRead(A0));
+    return random(1,100);
+
+}
+
+bool findCH()
 {
 
-  xMili = 0; xSecond = 0; xMinute = 0; xHour = 0; currentMilis=0;
+    //Cek jumlah round
+    if(r > n)
+    {
+        //Reset round
+        r = 1;
+    }
+
+    float T = findT();
+    float ran = getRandom();
+
+    r++;
+
+    if(ran < T)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+
+}
+
+void setTimer(int h, int m, int s)
+{
+    T.SetTimer(h,m,s);
+    T.StartTimer();
+}
+
+//------------------------------------------------------------------------------
+//Blok fungsi untuk overloaded radio_listening----------------------------------
+bool radio_listening(long addr, data_CH *ret)
+{
+    radio.openReadingPipe(0, addr);
+    radio.startListening();
+
+    if(radio.available())
+    {
+        radio.read(ret, sizeof(data_CH));
+        return true;
+    }
+
+    return false;
+}
+
+bool radio_listening(long addr, dataSt* msg, unsigned int packet_size)
+{
+    radio.openReadingPipe(0, addr);
+    radio.startListening();
+
+    if(radio.available())
+    {
+        radio.read(msg, sizeof(dataSt));
+        return true;
+    }
+
+    return false;
+}
+
+bool radio_listening(long addr, char* msg, unsigned int packet_size)
+{
+    radio.openReadingPipe(0, addr);
+    radio.startListening();
+
+    if(radio.available())
+    {
+        radio.read(msg, packet_size);
+        return true;
+    }
+
+    return false;
+}
+
+//End block fungsi radio_listening----------------------------------------------
+
+//------------------------------------------------------------------------------
+//Block fungsi radio_send--------------------------------------------------------
+void radio_send(long addr, data_CH *msg)
+{
+    radio.stopListening();
+    radio.openWritingPipe(addr);
+
+    radio.write(msg, sizeof(data_CH));
+}
+
+void radio_send(long addr, data_CH * msg, long delay_micro)
+{
+    radio.openWritingPipe(addr);
+    radio.stopListening();
+    delay(delay_micro);
+    radio.write(msg, sizeof(data_CH));
+}
+
+void radio_send(long addr, char *msg, unsigned int packet_size, long delay_micro)
+{
+    radio.openWritingPipe(addr);
+    radio.stopListening();
+    delay(delay_micro);
+    radio.write(msg, sizeof(msg));
+}
+
+void radio_send(long addr, char *msg, unsigned int packet_size)
+{
+    radio.openWritingPipe(addr);
+    radio.stopListening();
+    radio.write(msg, packet_size);
+}
+
+void radio_send(long addr, dataSt* msg, long delay_micro)
+{
+    radio.openWritingPipe(addr);
+    radio.stopListening();
+    delay(delay_micro);
+    radio.write(msg, sizeof(dataSt));
+}
+
+//End block fungsi radio_send---------------------------------------------------
+
+void reset_ch_flag()
+{
+    //Reset status CH sebelum melakukan findCH kembali
+    flagCH = false;
+    flag_ch_found = false;
+}
+
+void wait_for_ch()
+{
+    setTimer(0, 0, 11);
+    ch_now.status = 0;
+    while(!T.TimeCheck(0, 0, 0))
+    {
+        //reset ch_sekarang
+        //TODO: Jadikan fungsi
+        T.Timer();
+
+        if(radio_listening(broadcast_addr, &ch_lain))
+        {
+            if(ch_lain.status > ch_now.status)
+            {
+                ch_now.CH_addr = ch_lain.CH_addr;
+                ch_now.status = ch_lain.status;
+                flag_ch_found = true;
+            }
+        }
+    }
+}
+
+void setup_phase()
+{
+    if(findCH())
+    {
+        //Jika terpilih jadi CH
+        flagCH = true;
+        Serial.println("jadiCH");
+        data_CH data;
+        data.CH_addr = self_addr;
+        data.status = getStatus();
 
 
- // while (!Serial);
+
+        Serial.print("Status: ");
+        Serial.println(data.status);
+        //set broadcast selama 6 detik
+        setTimer(0,0,10);
+
+        //Broadcast CH dan listening kemungkinan ada CH lain
+        while(!T.TimeCheck(0,0,0))
+        {
+            //Serial.println("sfsf");
+            T.Timer();
+
+            //Broadcast dan listening secara bergantian
+            //Broadcast saya CH di detik genap
+            if(T.ShowSeconds() % 2 ==0)
+            {
+              radio_send(broadcast_addr, &data,random(1,200));
+            }
+
+            //Listening kemungkinan ada CH lain di detik kelipatan 3
+            if(T.ShowSeconds() % 3 == 0)
+            {
+              if(radio_listening(broadcast_addr, &ch_lain))
+              {
+                  Serial.println("dapat dari CH lain: ");
+                  Serial.println(ch_lain.status);
+
+                  //cek jika dapat ada CH lain dengan status sendiri dan membandingkan
+                  //TODO: status masih random
+                  if(ch_lain.status > data.status)
+                  {
+                      //Set CH addr ke CH lain
+                      flagCH = false;
+                      flag_ch_found = true;
+                      Serial.print(ch_lain.CH_addr);
+                      Serial.println(" jadi CH");
+                      ch_now.CH_addr = ch_lain.CH_addr;
+                      ch_now.status = ch_lain.status;
+                      //CH_addr = ch_lain.CH_addr;
+                  }
+                  else
+                  {
+                      Serial.println("Saya jadi CH");
+                      flagCH = true;
+                  }
+              }
+            }
+        }
+    }
+    else{
+        //Jika tidak jadi CH listening untuk broadcast CH
+
+        //Setting Timer untuk lama listening menunggu broadcast dari CH
+        wait_for_ch();
+    }
+}
+
+void setup() {
+  // put your setup code here, to run once:
   Serial.begin(57600);
-
-
   radio.begin();
-  radio.openReadingPipe(0, rxAddr);
-  radio.startListening();
+  Serial.println("mulai");
+  gmsg.addr = self_addr;
 
-}
-
-
-void countTime() {
-  if (xMili == 999) {
-    ++xSecond;
-    xMili = 0;
-  }
-  if ((xSecond > 59)) {
-    ++xMinute;
-    xSecond = 0;
-    currentSecond = -1;
-  }
-  if (xMinute > 59) {
-    ++xHour;
-    xMinute = 0;
-
-  }
-  ++xMili;
-}
-
-void countMillis() {
-
-  wTime = millis();
-  if (currentMilis == 0) {
-    currentMilis = wTime;
-  }
-
-  if ((wTime - currentMilis > 999)) {
-    ++xSecond;
-    currentMilis = wTime;
-  }
-  if ((xSecond > 59)) {
-    ++xMinute;
-    xSecond = 0;
-    currentSecond = -1;
-  }
-  if (xMinute > 59) {
-    ++xHour;
-    xMinute = 0;
-
-  }
-  // ++xMili;
-}
-
-
-void tapListening() {
-
-  // radio.openReadingPipe(0, rxAddr);
-  // radio.startListening();
-  data_CH data;
-  if (radio.available())
+  while( (flag_ch_found == false) && (flagCH == false) )
   {
-    // int a = 0;
-    //const char rtext[25];
-    Serial.print("Dapat data: ");
-    radio.read(&data, sizeof(data));
-    Serial.println(data.status);
+      Serial.println("setup phase");
+      setup_phase();
   }
 
 }
 
-void transmit(data_CH* Message)
-{
-  //Serial.print("Alamat2");
-  //Serial.println(Message->status);
-  //radio.setRetries(15, 15);
-  radio.stopListening();
-  radio.openWritingPipe(rxAddr);
+void loop() {
+    //T.Timer();
+    Serial.println("Masuk loop");
+    if(flagCH)
+    {
+        //Jadi CH
+        radio.setPALevel(RF24_PA_HIGH);
+        Serial.println("Menunggu data");
+        setTimer(0, 0, 20);
 
-  // String c = Message;
-  // char pesan[25];
-  // c.toCharArray(pesan, 25);
+         dataSt msg;
 
-  radio.write(Message, sizeof(data_CH));
-  radio.openReadingPipe(0, rxAddr);
-  radio.startListening();
-
-}
-
-void loop()
-{
+        while(!T.TimeCheck(0, 0, 0))
+        {
+            T.Timer();
 
 
+            if(radio_listening(self_addr, &msg, sizeof(msg)))
+            {
+                //Kirim me sink
+                Serial.println(msg.msg);
+                radio_send(sink_addr, &msg, 0);
+            }
+        }
 
-  currentSecond = xSecond;
-  countTime();
+        //Broadcast ganti CH
+        setTimer(0,0,3);
 
+        while(!T.TimeCheck(0,0,0))
+        {
+            T.Timer();
+            Serial.println("Ganti ch");
+            char text[] = "CNGCH";
+            radio_send(broadcast_addr, text, sizeof(text));
+        }
+    }
+    else if(flag_ch_found)
+    {
+        //jadi node biasa
+        radio.setPALevel(RF24_PA_MIN);
+        setTimer(0,15,0);
+        char msg[25];
+        while(!T.TimeCheck(0,0,0))
+        {
+            T.Timer();
+            if(radio_listening(broadcast_addr,msg,sizeof(msg)))
+            {
+                Serial.println("Mendengar");
+                Serial.println(msg);
+                if(strcmp(msg, change_ch_message) == 0)
+                {
+                    Serial.println("Mendapatkan pesan cahnge CH");
+                    break;
+                }
+            }
 
-  tapListening();
+            if(T.ShowSeconds() % 3 == 0)
+            {
+                Serial.println("mengirim data");
+                strcpy(gmsg.msg, "dummy");
+                radio_send(ch_now.CH_addr, &gmsg, getRandom());
+            }
 
+        }
+    }
 
-  if ((currentSecond < xSecond) && ((xSecond % 2) == 0)) {
+    //TODO: Ganti cara cari ch agar bersamaan
 
-    // char text[25];
-    // String myMessage = String(xHour, DEC) + ":" + String(xMinute, DEC) + ":" + String(xSecond, DEC);
-    // myMessage.concat("Uno 2");
-    // Serial.println(myMessage);
+    if(flagCH)
+    {
+        reset_ch_flag();
+        wait_for_ch;
+    }
+    else
+    {
+      reset_ch_flag();
 
-    data_CH ch;
-
-    ch.status = 3.0;
-    //Serial.print("Alamat1 ");
-    //Serial.println(sizeof(ch));
-    transmit(&ch);
-
-
-  }
-  delay(1);
+      while( (flag_ch_found == false) && (flagCH == false) )
+      {
+          setup_phase();
+      }
+    }
 }
