@@ -215,6 +215,7 @@ void wait_for_ch()
 
 void setup_phase()
 {
+    
     if(findCH())
     {
         //Jika terpilih jadi CH

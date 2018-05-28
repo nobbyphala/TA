@@ -203,6 +203,8 @@ void wait_for_ch()
 
         if(radio_listening(broadcast_addr, &ch_lain))
         {
+            Serial.println("Menunggu CH");
+            
             if(ch_lain.status > ch_now.status)
             {
                 ch_now.CH_addr = ch_lain.CH_addr;
@@ -303,7 +305,7 @@ void loop() {
     if(flagCH)
     {
         //Jadi CH
-        radio.setPALevel(RF24_PA_HIGH);
+        //radio.setPALevel(RF24_PA_HIGH);
         Serial.println("Menunggu data");
         setTimer(0, 0, 20);
 
@@ -336,7 +338,7 @@ void loop() {
     else if(flag_ch_found)
     {
         //jadi node biasa
-        radio.setPALevel(RF24_PA_MIN);
+        //radio.setPALevel(RF24_PA_MIN);
         setTimer(0,15,0);
         char msg[25];
         while(!T.TimeCheck(0,0,0))
