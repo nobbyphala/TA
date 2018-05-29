@@ -191,6 +191,15 @@ void reset_ch_flag()
     flag_ch_found = false;
 }
 
+void tell_i_am_ch()
+{
+    data_CH data;
+    data.CH_addr = self_addr;
+    data.status = -1;
+
+    radio_send(broadcast_addr, &data);
+}
+
 void wait_for_ch()
 {
     setTimer(0, 0, 11);
@@ -199,15 +208,22 @@ void wait_for_ch()
     {
         //reset ch_sekarang
         //TODO: Jadikan fungsi
-        T.Timer();
-
+        //T.Timer();
+        Serial.println("Mebunggu CH");
         if(radio_listening(broadcast_addr, &ch_lain))
         {
-            if(ch_lain.status > ch_now.status)
+            // if(ch_lain.status > ch_now.status)
+            // {
+            //     ch_now.CH_addr = ch_lain.CH_addr;
+            //     ch_now.status = ch_lain.status;
+            //     flag_ch_found = true;
+            // }
+            if(ch_lain.status == -1)
             {
-                ch_now.CH_addr = ch_lain.CH_addr;
-                ch_now.status = ch_lain.status;
-                flag_ch_found = true;
+              ch_now.CH_addr = ch_lain.CH_addr;
+              ch_now.status = ch_lain.status;
+              flag_ch_found = true;
+                break;
             }
         }
     }
@@ -215,7 +231,6 @@ void wait_for_ch()
 
 void setup_phase()
 {
-    
     if(findCH())
     {
         //Jika terpilih jadi CH
@@ -259,12 +274,13 @@ void setup_phase()
                   {
                       //Set CH addr ke CH lain
                       flagCH = false;
-                      flag_ch_found = true;
+                      //flag_ch_found = true;
                       Serial.print(ch_lain.CH_addr);
                       Serial.println(" jadi CH");
-                      ch_now.CH_addr = ch_lain.CH_addr;
-                      ch_now.status = ch_lain.status;
+                      // ch_now.CH_addr = ch_lain.CH_addr;
+                      // ch_now.status = ch_lain.status;
                       //CH_addr = ch_lain.CH_addr;
+                      break;
                   }
                   else
                   {
@@ -290,10 +306,18 @@ void setup() {
   Serial.println("mulai");
   gmsg.addr = self_addr;
 
+  Serial.println("setup phase");
+  setup_phase();
+
   while( (flag_ch_found == false) && (flagCH == false) )
   {
-      Serial.println("setup phase");
-      setup_phase();
+    wait_for_ch();
+  }
+
+  if(flagCH == true)
+  {
+      tell_i_am_ch();
+      tell_i_am_ch();
   }
 
 }
@@ -375,9 +399,17 @@ void loop() {
     {
       reset_ch_flag();
 
+      setup_phase();
+
       while( (flag_ch_found == false) && (flagCH == false) )
       {
-          setup_phase();
+        wait_for_ch();
+      }
+
+      if(flagCH == true)
+      {
+          tell_i_am_ch();
+          tell_i_am_ch();
       }
     }
 }
