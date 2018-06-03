@@ -25,6 +25,8 @@ bool flagCH = false;
 bool flag_ch_found = false;
 
 long packet_send = 0;
+unsigned long packet_id_counter = 1;
+
 int random_number;
 
 struct data_CH{
@@ -34,7 +36,8 @@ struct data_CH{
 
 struct dataSt{
     long addr;
-    char msg[100];
+    char msg[10];
+    unsigned long id_packet;
 };
 
 data_CH ch_lain;
@@ -42,6 +45,7 @@ data_CH ch_now;
 
 dataSt gmsg;
 CountUpDownTimer T(DOWN);
+CountUpDownTimer T1(UP, HIGH);
 
 float findT()
 {
@@ -268,13 +272,14 @@ void setup_phase()
 
             //Broadcast dan listening secara bergantian
             //Broadcast saya CH di detik genap
-            if(T.ShowSeconds() % 2 ==0)
+            if(T.ShowSeconds() % 2 ==0 && T.TimeHasChanged())
             {
-              radio_send(broadcast_addr, &data,random(1,200));
+              randomSeed(analogRead(A0));
+              radio_send(broadcast_addr, &data,random(1,100));
             }
 
             //Listening kemungkinan ada CH lain di detik kelipatan 3
-            if(T.ShowSeconds() % 3 == 0)
+            if(T.ShowSeconds() % 3 == 0 && T.TimeHasChanged())
             {
               if(radio_listening(broadcast_addr, &ch_lain))
               {
@@ -383,12 +388,14 @@ void loop() {
     {
         //jadi node biasa
         radio.setPALevel(RF24_PA_MIN);
-        // kalo bisa ganti timer countup
-        setTimer(0,15,0);
+        //setTimer(0,15,0);
+        T1.StopTimer();
+        T1.StartTimer();
+
         char msg[25];
-        while(!T.TimeCheck(0,0,0))
+        while(true)
         {
-            T.Timer();
+            T1.Timer();
             if(radio_listening(broadcast_addr,msg,sizeof(msg)))
             {
                 Serial.println("Mendengar");
@@ -400,11 +407,13 @@ void loop() {
                 }
             }
 
-            if(T.ShowSeconds() % 10 == 0 && T.TimeHasChanged())
+            if(T1.ShowSeconds() % 3 == 0 && T1.TimeHasChanged())
             {
                 Serial.println("mengirim data");
+                gmsg.id_packet = packet_id_counter;
                 strcpy(gmsg.msg, "dummy");
                 radio_send(ch_now.CH_addr, &gmsg, getRandom());
+                packet_id_counter++;
             }
 
         }

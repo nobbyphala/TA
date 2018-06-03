@@ -25,6 +25,8 @@ bool flagCH = false;
 bool flag_ch_found = false;
 
 long packet_send = 0;
+unsigned long packet_id_counter = 1;
+
 int random_number;
 
 struct data_CH{
@@ -34,7 +36,8 @@ struct data_CH{
 
 struct dataSt{
     long addr;
-    char msg[100];
+    char msg[10];
+    unsigned long id_packet;
 };
 
 data_CH ch_lain;
@@ -365,7 +368,7 @@ void loop() {
             if(radio_listening(self_addr, &msg, sizeof(msg)))
             {
                 //Kirim me sink
-                Serial.println(msg.addr);
+                Serial.println(msg.id_packet);
                 radio_send(sink_addr, &msg, 0);
             }
         }
@@ -404,11 +407,13 @@ void loop() {
                 }
             }
 
-            if(T1.ShowSeconds() % 10 == 0 && T1.TimeHasChanged())
+            if(T1.ShowSeconds() % 3 == 0 && T1.TimeHasChanged())
             {
                 Serial.println("mengirim data");
+                gmsg.id_packet = packet_id_counter;
                 strcpy(gmsg.msg, "dummy");
                 radio_send(ch_now.CH_addr, &gmsg, getRandom());
+                packet_id_counter++;
             }
 
         }
