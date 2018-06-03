@@ -24,9 +24,12 @@ bool flagCH = false;
 //Flag CH sudah ada belum
 bool flag_ch_found = false;
 
+long packet_send = 0;
+int random_number;
+
 struct data_CH{
     long CH_addr;
-    float status;
+    long status;
 };
 
 struct dataSt{
@@ -149,6 +152,8 @@ void radio_send(long addr, data_CH *msg)
     radio.openWritingPipe(addr);
 
     radio.write(msg, sizeof(data_CH));
+
+    packet_send ++;
 }
 
 void radio_send(long addr, data_CH * msg, long delay_micro)
@@ -157,6 +162,8 @@ void radio_send(long addr, data_CH * msg, long delay_micro)
     radio.stopListening();
     delay(delay_micro);
     radio.write(msg, sizeof(data_CH));
+
+    packet_send ++;
 }
 
 void radio_send(long addr, char *msg, unsigned int packet_size, long delay_micro)
@@ -165,6 +172,8 @@ void radio_send(long addr, char *msg, unsigned int packet_size, long delay_micro
     radio.stopListening();
     delay(delay_micro);
     radio.write(msg, sizeof(msg));
+
+    packet_send ++;
 }
 
 void radio_send(long addr, char *msg, unsigned int packet_size)
@@ -172,6 +181,8 @@ void radio_send(long addr, char *msg, unsigned int packet_size)
     radio.openWritingPipe(addr);
     radio.stopListening();
     radio.write(msg, packet_size);
+
+    packet_send ++;
 }
 
 void radio_send(long addr, dataSt* msg, long delay_micro)
@@ -180,6 +191,8 @@ void radio_send(long addr, dataSt* msg, long delay_micro)
     radio.stopListening();
     delay(delay_micro);
     radio.write(msg, sizeof(dataSt));
+
+    packet_send ++;
 }
 
 //End block fungsi radio_send---------------------------------------------------
@@ -202,13 +215,13 @@ void tell_i_am_ch()
 
 void wait_for_ch()
 {
-    setTimer(0, 0, 11);
+    setTimer(0, 0, 30);
     ch_now.status = 0;
     while(!T.TimeCheck(0, 0, 0))
     {
         //reset ch_sekarang
         //TODO: Jadikan fungsi
-        //T.Timer();
+        T.Timer();
         Serial.println("Mebunggu CH");
         if(radio_listening(broadcast_addr, &ch_lain))
         {
@@ -238,7 +251,7 @@ void setup_phase()
         Serial.println("jadiCH");
         data_CH data;
         data.CH_addr = self_addr;
-        data.status = getStatus();
+        data.status = packet_send + random_number;
 
 
 
@@ -307,6 +320,9 @@ void setup() {
   gmsg.addr = self_addr;
 
   Serial.println("setup phase");
+
+  random_number = getStatus();
+
   setup_phase();
 
   while( (flag_ch_found == false) && (flagCH == false) )
@@ -317,6 +333,7 @@ void setup() {
   if(flagCH == true)
   {
       tell_i_am_ch();
+      delay(100);
       tell_i_am_ch();
   }
 
@@ -330,7 +347,7 @@ void loop() {
         //Jadi CH
         radio.setPALevel(RF24_PA_HIGH);
         Serial.println("Menunggu data");
-        setTimer(0, 0, 20);
+        setTimer(0, 1, 0);
 
          dataSt msg;
 
@@ -338,11 +355,15 @@ void loop() {
         {
             T.Timer();
 
+            // if(T.ShowSeconds() % 5 == 0)
+            // {
+            //     tell_i_am_ch();
+            // }
 
             if(radio_listening(self_addr, &msg, sizeof(msg)))
             {
                 //Kirim me sink
-                Serial.println(msg.msg);
+                Serial.println(msg.addr);
                 radio_send(sink_addr, &msg, 0);
             }
         }
@@ -362,6 +383,7 @@ void loop() {
     {
         //jadi node biasa
         radio.setPALevel(RF24_PA_MIN);
+        // kalo bisa ganti timer countup
         setTimer(0,15,0);
         char msg[25];
         while(!T.TimeCheck(0,0,0))
@@ -378,7 +400,7 @@ void loop() {
                 }
             }
 
-            if(T.ShowSeconds() % 3 == 0)
+            if(T.ShowSeconds() % 10 == 0 && T.TimeHasChanged())
             {
                 Serial.println("mengirim data");
                 strcpy(gmsg.msg, "dummy");
@@ -390,10 +412,11 @@ void loop() {
 
     //TODO: Ganti cara cari ch agar bersamaan
 
+    radio.setPALevel(RF24_PA_HIGH);
     if(flagCH)
     {
         reset_ch_flag();
-        wait_for_ch;
+        wait_for_ch();
     }
     else
     {
@@ -401,15 +424,32 @@ void loop() {
 
       setup_phase();
 
-      while( (flag_ch_found == false) && (flagCH == false) )
-      {
-        wait_for_ch();
-      }
-
       if(flagCH == true)
       {
           tell_i_am_ch();
+          delay(100);
           tell_i_am_ch();
       }
+      else
+      {
+          wait_for_ch();
+      }
     }
+
+    while( (flag_ch_found == false) && (flagCH == false) )
+    {
+      setup_phase();
+      if(flagCH == true)
+      {
+          tell_i_am_ch();
+          delay(100);
+          tell_i_am_ch();
+      }
+      else
+      {
+          wait_for_ch();
+      }
+
+    }
+
 }
